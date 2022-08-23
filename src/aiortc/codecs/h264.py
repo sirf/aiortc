@@ -122,7 +122,7 @@ class H264Decoder(Decoder):
 
 
 def create_encoder_context(
-    codec_name: str, width: int, height: int, bitrate: int
+    codec_name: str, width: int, height: int, bitrate: int, crf: int
 ) -> Tuple[av.CodecContext, bool]:
     codec = av.CodecContext.create(codec_name, "w")
     codec.width = width
@@ -135,6 +135,7 @@ def create_encoder_context(
         "profile": "baseline",
         "level": "31",
         "tune": "zerolatency",  # does nothing using h264_omx
+        "crf": str(crf),
     }
     codec.open()
     return codec, codec_name == "h264_omx"
@@ -147,6 +148,7 @@ class H264Encoder(Encoder):
         self.codec: Optional[av.CodecContext] = None
         self.codec_buffering = False
         self.__target_bitrate = DEFAULT_BITRATE
+        self.crf = 0
 
     @staticmethod
     def _packetize_fu_a(data: bytes) -> List[bytes]:
@@ -292,6 +294,7 @@ class H264Encoder(Encoder):
                     frame.width,
                     frame.height,
                     bitrate=self.target_bitrate,
+                    crf=self.crf,
                 )
 
         data_to_send = b""
@@ -338,6 +341,14 @@ class H264Encoder(Encoder):
         bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
         self.__target_bitrate = bitrate
 
+    def max_crf(self) -> int:
+        return 51
+
+    def get_crf(self) -> int:
+        return self.crf
+
+    def set_crf(self, crf: int):
+        self.crf = crf
 
 def h264_depayload(payload: bytes) -> bytes:
     descriptor, data = H264PayloadDescriptor.parse(payload)

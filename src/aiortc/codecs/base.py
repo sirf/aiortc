@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from av.frame import Frame
 from av.packet import Packet
@@ -23,3 +23,14 @@ class Encoder(metaclass=ABCMeta):
     @abstractmethod
     def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
         pass  # pragma: no cover
+
+    # 51 for H.264, 63 for VP8
+    # Not abstract since OpenEncoder etc also inherit this class
+    def max_crf(self) -> Optional[int]:
+        return None
+
+    def get_crf(self) -> Optional[int]:
+        return None
+
+    def set_crf(self, crf: int):
+        pass
