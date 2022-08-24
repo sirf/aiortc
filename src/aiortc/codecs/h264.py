@@ -297,6 +297,8 @@ class H264Encoder(Encoder):
                     crf=self.crf,
                 )
 
+        self.codec.opt_set_int('crf', self.crf)
+
         data_to_send = b""
         for package in self.codec.encode(frame):
             package_bytes = bytes(package)
