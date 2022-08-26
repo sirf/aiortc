@@ -286,7 +286,7 @@ class H264Encoder(Encoder):
         if self.codec is None:
             try:
                 self.codec, self.codec_buffering = create_encoder_context(
-                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
+                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate, crf=self.crf
                 )
             except Exception:
                 self.codec, self.codec_buffering = create_encoder_context(
