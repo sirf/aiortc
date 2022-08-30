@@ -406,6 +406,9 @@ class Vp8Encoder(Encoder):
         return self.crf
 
     def set_crf(self, crf: int):
+        if crf < self.min_crf() or crf > self.max_crf():
+            raise ValueError(f'crf={crf} out of range')
+
         if crf != self.crf:
             self.crf = crf
             self.cfg.rc_min_quantizer = self.cfg.rc_max_quantizer = self.crf

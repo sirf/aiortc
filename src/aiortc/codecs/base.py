@@ -36,4 +36,4 @@ class Encoder(metaclass=ABCMeta):
         return None
 
     def set_crf(self, crf: int):
-        pass
+        raise NotImplementedError()
