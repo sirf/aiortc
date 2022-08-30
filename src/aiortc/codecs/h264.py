@@ -148,7 +148,7 @@ class H264Encoder(Encoder):
         self.codec: Optional[av.CodecContext] = None
         self.codec_buffering = False
         self.__target_bitrate = DEFAULT_BITRATE
-        self.crf = 0
+        self.crf = self.min_crf()
 
     @staticmethod
     def _packetize_fu_a(data: bytes) -> List[bytes]:
@@ -342,6 +342,9 @@ class H264Encoder(Encoder):
     def target_bitrate(self, bitrate: int) -> None:
         bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
         self.__target_bitrate = bitrate
+
+    def min_crf(self) -> int:
+        return 1
 
     def max_crf(self) -> int:
         return 51

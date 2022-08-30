@@ -396,6 +396,9 @@ class Vp8Encoder(Encoder):
         self.cfg.rc_target_bitrate = self.__target_bitrate // 1000
         self.__update_config_needed = False
 
+    def min_crf(self) -> int:
+        return 0
+
     def max_crf(self) -> int:
         return 63
 

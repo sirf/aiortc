@@ -24,8 +24,11 @@ class Encoder(metaclass=ABCMeta):
     def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
         pass  # pragma: no cover
 
-    # 51 for H.264, 63 for VP8
-    # Not abstract since OpenEncoder etc also inherit this class
+    # 1..51 for H.264, 0..63 for VP8
+    # Not abstract since OpusEncoder etc also inherit this class
+    def min_crf(self) -> Optional[int]:
+        return None
+
     def max_crf(self) -> Optional[int]:
         return None
 
