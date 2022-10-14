@@ -305,9 +305,13 @@ class Vp8Encoder(Encoder):
             )
         elif self.__update_config_needed:
             self.__update_config()
+            # grab self.crf since another thread could update its value between setting min/max quant and CQ_LEVEL
+            # yes this has actually happened
+            crf = self.crf
+            self.cfg.rc_min_quantizer = self.cfg.rc_max_quantizer = crf
             # yes this has to be done as well
             lib.vpx_codec_control_(
-                self.codec, lib.VP8E_SET_CQ_LEVEL, ffi.cast("unsigned int", self.crf)
+                self.codec, lib.VP8E_SET_CQ_LEVEL, ffi.cast("unsigned int", crf)
             )
             _vpx_assert(lib.vpx_codec_enc_config_set(self.codec, self.cfg))
 
@@ -413,7 +417,6 @@ class Vp8Encoder(Encoder):
 
         if int(crf) != self.crf:
             self.crf = int(crf)
-            self.cfg.rc_min_quantizer = self.cfg.rc_max_quantizer = self.crf
             self.__update_config_needed = True
 
 
