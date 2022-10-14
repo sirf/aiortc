@@ -26,14 +26,14 @@ class Encoder(metaclass=ABCMeta):
 
     # 1..51 for H.264, 0..63 for VP8
     # Not abstract since OpusEncoder etc also inherit this class
-    def min_crf(self) -> Optional[int]:
+    def min_crf(self) -> Optional[float]:
         return None
 
-    def max_crf(self) -> Optional[int]:
+    def max_crf(self) -> Optional[float]:
         return None
 
-    def get_crf(self) -> Optional[int]:
+    def get_crf(self) -> Optional[float]:
         return None
 
-    def set_crf(self, crf: int):
+    def set_crf(self, crf: float):
         raise NotImplementedError()
