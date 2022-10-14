@@ -53,7 +53,8 @@ CRF_DOWN_DELAY = 1      # how long to wait before adjusting down again
 
 # Bandwidth simulation
 BANDWIDTH_WINDOW = 1.0 # window to measure bandwidth over. should be at least the length of a GOP
-SIMULATED_BANDWIDTH = 1000e3 # if not None then packets are dropped randomly and proportionally if above this limit
+#SIMULATED_BANDWIDTH = 1000e3 # if not None then packets are dropped randomly and proportionally if above this limit
+SIMULATED_BANDWIDTH = None
 
 class RTCEncodedFrame:
     def __init__(self, payloads: List[bytes], timestamp: int, audio_level: int):
@@ -235,7 +236,6 @@ class RTCRtpSender:
             crf = self.__encoder.get_crf()
             if crf is not None:
                 crf2 = min(self.__encoder.max_crf(), max(self.__encoder.min_crf(), crf + delta))
-                logger.info(f'adjust crf {delta:.3f}: {crf:.2f} -> {crf2:.2f}')
                 self.__encoder.set_crf(crf2)
 
     async def _handle_rtcp_packet(self, packet):
