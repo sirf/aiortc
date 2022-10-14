@@ -46,10 +46,10 @@ logger = logging.getLogger(__name__)
 RTT_ALPHA = 0.85
 CRF_UP_THRESH = 1       # NACK must report more than this number of packets lost before we adjust CRF
 CRF_UP_CAP = 5          # cap on the amount we adjust CRF
-CRF_UP_AMOUNT = 0.003   # this gets scaled by the number of packets lost
-CRF_UP_DELAY = 10       # how long to wait between increasing CRF before we allow decreasing it
-CRF_DOWN_AMOUNT = -0.01 # how much to adjust CRF down when things are calm
-CRF_DOWN_DELAY = 3      # how long to wait before adjusting down again
+CRF_UP_AMOUNT = 0.5     # this gets scaled by the number of packets lost
+CRF_UP_DELAY = 3        # how long to wait between increasing CRF before we allow decreasing it
+CRF_DOWN_AMOUNT = -1    # how much to adjust CRF down when things are calm
+CRF_DOWN_DELAY = 1      # how long to wait before adjusting down again
 
 # Bandwidth simulation
 BANDWIDTH_WINDOW = 1.0 # window to measure bandwidth over. should be at least the length of a GOP
@@ -234,9 +234,8 @@ class RTCRtpSender:
         if self.__encoder is not None:
             crf = self.__encoder.get_crf()
             if crf is not None:
-                crf2 = max(1, crf)  # can't scale if crf == 0
-                crf2 = min(self.__encoder.max_crf(), max(self.__encoder.min_crf(), crf2*(1+delta)))
-                logger.info(f'adjust crf {delta}: {crf:.2f} -> {crf2:.2f}')
+                crf2 = min(self.__encoder.max_crf(), max(self.__encoder.min_crf(), crf + delta))
+                logger.info(f'adjust crf {delta:.3f}: {crf:.2f} -> {crf2:.2f}')
                 self.__encoder.set_crf(crf2)
 
     async def _handle_rtcp_packet(self, packet):
