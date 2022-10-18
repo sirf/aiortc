@@ -117,6 +117,7 @@ class RTCRtpSender:
         self.__rtt = None
         self.__window = []
         self.__last_crf_down = self.__last_crf_up = time.time()
+        self.__adjust_crf = True
 
         # logging
         self.__log_debug: Callable[..., None] = lambda *args: None
@@ -271,7 +272,7 @@ class RTCRtpSender:
         elif isinstance(packet, RtcpRtpfbPacket) and packet.fmt == RTCP_RTPFB_NACK:
             # filter out spurious single-packet losses
             nlost = len(packet.lost)
-            if nlost > CRF_UP_THRESH:
+            if nlost > CRF_UP_THRESH and self.__adjust_crf:
                 # cap the amount of adjustment we do
                 self.adjust_crf(CRF_UP_AMOUNT * min(nlost - CRF_UP_THRESH, CRF_UP_CAP))
                 self.__last_crf_down = self.__last_crf_up = time.time()
@@ -362,7 +363,7 @@ class RTCRtpSender:
                 self.__window = [(t,sz) for t,sz in self.__window if t >= cur_t - BANDWIDTH_WINDOW]
                 bps = sum([sz for t,sz in self.__window]) * 8 / BANDWIDTH_WINDOW
 
-                if cur_t >= self.__last_crf_up + CRF_UP_DELAY and cur_t >= self.__last_crf_down + CRF_DOWN_DELAY:
+                if cur_t >= self.__last_crf_up + CRF_UP_DELAY and cur_t >= self.__last_crf_down + CRF_DOWN_DELAY and self.__adjust_crf:
                     self.adjust_crf(CRF_DOWN_AMOUNT)
                     self.__last_crf_down = cur_t
 
@@ -475,3 +476,7 @@ class RTCRtpSender:
 
     def __log_warning(self, msg: str, *args) -> None:
         logger.warning(f"RTCRtpsender(%s) {msg}", self.__kind, *args)
+
+    def set_adjust_crf(self, enable: bool):
+        self.__last_crf_down = self.__last_crf_up = time.time()
+        self.__adjust_crf = enable
