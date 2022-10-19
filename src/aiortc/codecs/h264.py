@@ -297,7 +297,7 @@ class H264Encoder(Encoder):
                     crf=self.crf,
                 )
 
-        self.codec.update_options(crf=str(srlf.crf))
+        self.codec.update_options(crf=str(self.crf))
 
         data_to_send = b""
         for package in self.codec.encode(frame):
