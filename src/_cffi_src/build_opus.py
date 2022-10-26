@@ -6,6 +6,7 @@ ffibuilder.set_source(
     "aiortc.codecs._opus",
     """
 #include <opus/opus.h>
+#include <opus/opus_multistream.h>
     """,
     libraries=["opus"],
 )
@@ -17,6 +18,7 @@ ffibuilder.cdef(
 
 typedef struct OpusDecoder OpusDecoder;
 typedef struct OpusEncoder OpusEncoder;
+typedef struct OpusMSEncoder OpusMSEncoder;
 typedef int16_t opus_int16;
 typedef int32_t opus_int32;
 
@@ -49,6 +51,24 @@ opus_int32 opus_encode(
     opus_int32 max_data_bytes
 );
 void opus_encoder_destroy(OpusEncoder *st);
+
+OpusMSEncoder *opus_multistream_encoder_create(
+      opus_int32 Fs,
+      int channels,
+      int streams,
+      int coupled_streams,
+      const unsigned char *mapping,
+      int application,
+      int *error
+);
+int opus_multistream_encode(
+    OpusMSEncoder *st,
+    const opus_int16 *pcm,
+    int frame_size,
+    unsigned char *data,
+    opus_int32 max_data_bytes
+);
+void opus_multistream_encoder_destroy(OpusMSEncoder *st);
 """
 )
 
