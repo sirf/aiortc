@@ -137,6 +137,7 @@ def create_encoder_context(
         "tune": "zerolatency",  # does nothing using h264_omx
         "crf": str(crf),
     }
+    codec.thread_count = 2
     codec.open()
     return codec, codec_name == "h264_omx"
 
