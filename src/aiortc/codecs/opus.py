@@ -103,3 +103,59 @@ class OpusEncoder(Encoder):
     def pack(self, packet: Packet) -> Tuple[List[bytes], int]:
         timestamp = convert_timebase(packet.pts, packet.time_base, TIME_BASE)
         return [bytes(packet)], timestamp
+
+# Hardcoded 5.1 for now
+class MultiOpusEncoder(OpusEncoder):
+    def __init__(self) -> None:
+        error = ffi.new("int *")
+        channel_mapping = ffi.new("unsigned char[6]")
+        channel_mapping[0:6] = [0,1,4,5,2,3]
+        self.encoder = lib.opus_multistream_encoder_create(
+            SAMPLE_RATE, 6, 4, 2, channel_mapping, lib.OPUS_APPLICATION_VOIP, error
+        )
+        assert error[0] == lib.OPUS_OK
+
+        self.cdata = ffi.new(
+            "unsigned char []", 1500 - 144 - 20 # needed for packets to be no larger than 1500 bytes
+        )
+        self.buffer = ffi.buffer(self.cdata)
+        self.rate_state: Optional[Tuple[int, Tuple[Tuple[int, int], ...]]] = None
+
+    def __del__(self) -> None:
+        lib.opus_multistream_encoder_destroy(self.encoder)
+
+    def encode(
+        self, frame: Frame, force_keyframe: bool = False
+    ) -> Tuple[List[bytes], int]:
+        assert isinstance(frame, AudioFrame)
+        assert frame.format.name == "s16"
+        assert frame.layout.name == 6
+
+        channels = len(frame.layout.channels)
+        if channels != 6:
+            raise ValueError(f'must be 6 channels, got {channels}')
+        data = bytes(frame.planes[0])
+        timestamp = frame.pts
+
+        # resample at 48 kHz
+        if frame.sample_rate != SAMPLE_RATE:
+            data, self.rate_state = audioop.ratecv(
+                data,
+                SAMPLE_WIDTH,
+                channels,
+                frame.sample_rate,
+                SAMPLE_RATE,
+                self.rate_state,
+            )
+            timestamp = (timestamp * SAMPLE_RATE) // frame.sample_rate
+
+        length = lib.opus_multistream_encode(
+            self.encoder,
+            ffi.cast("int16_t*", ffi.from_buffer(data)),
+            SAMPLES_PER_FRAME,
+            self.cdata,
+            len(self.cdata),
+        )
+        assert length > 0
+
+        return [self.buffer[0:length]], timestamp

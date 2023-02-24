@@ -5,6 +5,7 @@ import time
 import traceback
 import uuid
 from typing import Callable, Dict, List, Optional, Union
+import random
 
 from av import AudioFrame
 from av.frame import Frame
@@ -43,7 +44,17 @@ from .utils import random16, random32, uint16_add, uint32_add
 logger = logging.getLogger(__name__)
 
 RTT_ALPHA = 0.85
+CRF_UP_THRESH = 1       # NACK must report more than this number of packets lost before we adjust CRF
+CRF_UP_CAP = 5          # cap on the amount we adjust CRF
+CRF_UP_AMOUNT = 0.5     # this gets scaled by the number of packets lost
+CRF_UP_DELAY = 3        # how long to wait between increasing CRF before we allow decreasing it
+CRF_DOWN_AMOUNT = -1    # how much to adjust CRF down when things are calm
+CRF_DOWN_DELAY = 1      # how long to wait before adjusting down again
 
+# Bandwidth simulation
+BANDWIDTH_WINDOW = 1.0 # window to measure bandwidth over. should be at least the length of a GOP
+#SIMULATED_BANDWIDTH = 1000e3 # if not None then packets are dropped randomly and proportionally if above this limit
+SIMULATED_BANDWIDTH = None
 
 class RTCEncodedFrame:
     def __init__(self, payloads: List[bytes], timestamp: int, audio_level: int):
@@ -104,6 +115,9 @@ class RTCRtpSender:
         self.__octet_count = 0
         self.__packet_count = 0
         self.__rtt = None
+        self.__window = []
+        self.__last_crf_down = self.__last_crf_up = time.time()
+        self.__adjust_crf = True
 
         # logging
         self.__log_debug: Callable[..., None] = lambda *args: None
@@ -218,6 +232,13 @@ class RTCRtpSender:
             self.__rtcp_task.cancel()
             await asyncio.gather(self.__rtp_exited.wait(), self.__rtcp_exited.wait())
 
+    def adjust_crf(self, delta: float):
+        if self.__encoder is not None:
+            crf = self.__encoder.get_crf()
+            if crf is not None:
+                crf2 = min(self.__encoder.max_crf(), max(self.__encoder.min_crf(), crf + delta))
+                self.__encoder.set_crf(crf2)
+
     async def _handle_rtcp_packet(self, packet):
         if isinstance(packet, (RtcpRrPacket, RtcpSrPacket)):
             for report in filter(lambda x: x.ssrc == self._ssrc, packet.reports):
@@ -249,6 +270,13 @@ class RTCRtpSender:
                     )
                 )
         elif isinstance(packet, RtcpRtpfbPacket) and packet.fmt == RTCP_RTPFB_NACK:
+            # filter out spurious single-packet losses
+            nlost = len(packet.lost)
+            if nlost > CRF_UP_THRESH and self.__adjust_crf:
+                # cap the amount of adjustment we do
+                self.adjust_crf(CRF_UP_AMOUNT * min(nlost - CRF_UP_THRESH, CRF_UP_CAP))
+                self.__last_crf_down = self.__last_crf_up = time.time()
+
             for seq in packet.lost:
                 await self._retransmit(seq)
         elif isinstance(packet, RtcpPsfbPacket) and packet.fmt == RTCP_PSFB_PLI:
@@ -328,6 +356,17 @@ class RTCRtpSender:
                 enc_frame = await self._next_encoded_frame(codec)
                 timestamp = uint32_add(timestamp_origin, enc_frame.timestamp)
 
+                cur_t = time.time()
+                self.__window.append((cur_t, sum([len(p) for p in enc_frame.payloads])))
+
+                # prune old entries in window
+                self.__window = [(t,sz) for t,sz in self.__window if t >= cur_t - BANDWIDTH_WINDOW]
+                bps = sum([sz for t,sz in self.__window]) * 8 / BANDWIDTH_WINDOW
+
+                if cur_t >= self.__last_crf_up + CRF_UP_DELAY and cur_t >= self.__last_crf_down + CRF_DOWN_DELAY and self.__adjust_crf:
+                    self.adjust_crf(CRF_DOWN_AMOUNT)
+                    self.__last_crf_down = cur_t
+
                 for i, payload in enumerate(enc_frame.payloads):
                     packet = RtpPacket(
                         payload_type=codec.payloadType,
@@ -352,7 +391,8 @@ class RTCRtpSender:
                         packet.sequence_number % RTP_HISTORY_SIZE
                     ] = packet
                     packet_bytes = packet.serialize(self.__rtp_header_extensions_map)
-                    await self.transport._send_rtp(packet_bytes)
+                    if SIMULATED_BANDWIDTH is None or random.random() < SIMULATED_BANDWIDTH / bps:
+                        await self.transport._send_rtp(packet_bytes)
 
                     self.__ntp_timestamp = clock.current_ntp_time()
                     self.__rtp_timestamp = packet.timestamp
@@ -436,3 +476,7 @@ class RTCRtpSender:
 
     def __log_warning(self, msg: str, *args) -> None:
         logger.warning(f"RTCRtpsender(%s) {msg}", self.__kind, *args)
+
+    def set_adjust_crf(self, enable: bool):
+        self.__last_crf_down = self.__last_crf_up = time.time()
+        self.__adjust_crf = enable
