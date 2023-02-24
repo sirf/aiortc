@@ -182,7 +182,7 @@ class RTCIceGatherer(AsyncIOEventEmitter):
             iceServers = self.getDefaultIceServers()
         ice_kwargs = connection_kwargs(iceServers)
 
-        self._connection = Connection(ice_controlling=False, media_port=int(os.environ.get("JIT_PORT", "0")), **ice_kwargs)
+        self._connection = Connection(ice_controlling=False, ephemeral_ports=[int(os.environ.get("JIT_PORT", "0"))], **ice_kwargs)
         self._remote_candidates_end = False
         self.__state = "new"
 
