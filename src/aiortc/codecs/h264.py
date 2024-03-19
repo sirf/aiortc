@@ -19,7 +19,7 @@ DEFAULT_BITRATE = 1000000  # 1 Mbps
 MIN_BITRATE = 500000  # 500 kbps
 MAX_BITRATE = 3000000  # 3 Mbps
 
-MAX_FRAME_RATE = 30
+MAX_FRAME_RATE = 120
 PACKET_MAX = 1300
 
 NAL_TYPE_FU_A = 28
@@ -122,7 +122,7 @@ class H264Decoder(Decoder):
 
 
 def create_encoder_context(
-    codec_name: str, width: int, height: int, bitrate: int
+    codec_name: str, width: int, height: int, bitrate: int, crf: int
 ) -> Tuple[av.CodecContext, bool]:
     codec = av.CodecContext.create(codec_name, "w")
     codec.width = width
@@ -135,6 +135,7 @@ def create_encoder_context(
         "profile": "baseline",
         "level": "31",
         "tune": "zerolatency",  # does nothing using h264_omx
+        "crf": str(crf),
     }
     codec.open()
     return codec, codec_name == "h264_omx"
@@ -147,6 +148,7 @@ class H264Encoder(Encoder):
         self.codec: Optional[av.CodecContext] = None
         self.codec_buffering = False
         self.__target_bitrate = DEFAULT_BITRATE
+        self.crf_float = self.crf = int(self.min_crf())
 
     @staticmethod
     def _packetize_fu_a(data: bytes) -> List[bytes]:
@@ -288,7 +290,7 @@ class H264Encoder(Encoder):
         if self.codec is None:
             try:
                 self.codec, self.codec_buffering = create_encoder_context(
-                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate
+                    "h264_omx", frame.width, frame.height, bitrate=self.target_bitrate, crf=self.crf
                 )
             except Exception:
                 self.codec, self.codec_buffering = create_encoder_context(
@@ -296,7 +298,10 @@ class H264Encoder(Encoder):
                     frame.width,
                     frame.height,
                     bitrate=self.target_bitrate,
+                    crf=self.crf,
                 )
+
+        self.codec.update_options(crf=str(self.crf))
 
         data_to_send = b""
         for package in self.codec.encode(frame):
@@ -342,6 +347,20 @@ class H264Encoder(Encoder):
         bitrate = max(MIN_BITRATE, min(bitrate, MAX_BITRATE))
         self.__target_bitrate = bitrate
 
+    def min_crf(self) -> float:
+        return 1
+
+    def max_crf(self) -> float:
+        return 51
+
+    def get_crf(self) -> float:
+        return self.crf_float
+
+    def set_crf(self, crf: float):
+        if crf < self.min_crf() or crf > self.max_crf():
+            raise ValueError(f'crf={crf} out of range')
+        self.crf_float = crf
+        self.crf = int(crf)
 
 def h264_depayload(payload: bytes) -> bytes:
     descriptor, data = H264PayloadDescriptor.parse(payload)

@@ -51,8 +51,8 @@ class RTCRtpCodecParameters:
 
     def __str__(self):
         s = f"{self.name}/{self.clockRate}"
-        if self.channels == 2:
-            s += "/2"
+        if isinstance(self.channels, int):
+            s += "/" + str(self.channels)
         return s
 
 

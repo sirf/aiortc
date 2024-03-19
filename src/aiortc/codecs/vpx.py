@@ -16,7 +16,7 @@ DEFAULT_BITRATE = 500000  # 500 kbps
 MIN_BITRATE = 250000  # 250 kbps
 MAX_BITRATE = 1500000  # 1.5 Mbps
 
-MAX_FRAME_RATE = 30
+MAX_FRAME_RATE = 120
 PACKET_MAX = 1300
 
 DESCRIPTOR_T = TypeVar("DESCRIPTOR_T", bound="VpxPayloadDescriptor")
@@ -239,6 +239,7 @@ class Vp8Encoder(Encoder):
         self.timestamp_increment = VIDEO_CLOCK_RATE // MAX_FRAME_RATE
         self.__target_bitrate = DEFAULT_BITRATE
         self.__update_config_needed = False
+        self.crf_float = self.crf = 17
 
     def __del__(self) -> None:
         if self.codec:
@@ -267,14 +268,8 @@ class Vp8Encoder(Encoder):
             self.cfg.g_w = frame.width
             self.cfg.g_h = frame.height
             self.cfg.rc_resize_allowed = 0
-            self.cfg.rc_end_usage = lib.VPX_CBR
-            self.cfg.rc_min_quantizer = 2
-            self.cfg.rc_max_quantizer = 56
-            self.cfg.rc_undershoot_pct = 100
-            self.cfg.rc_overshoot_pct = 15
-            self.cfg.rc_buf_initial_sz = 500
-            self.cfg.rc_buf_optimal_sz = 600
-            self.cfg.rc_buf_sz = 1000
+            self.cfg.rc_end_usage = lib.VPX_CQ
+            self.cfg.rc_min_quantizer = self.cfg.rc_max_quantizer = self.crf
             self.cfg.kf_mode = lib.VPX_KF_AUTO
             self.cfg.kf_max_dist = 3000
             self.__update_config()
@@ -294,6 +289,9 @@ class Vp8Encoder(Encoder):
                 lib.VP8E_SET_TOKEN_PARTITIONS,
                 ffi.cast("int", lib.VP8_ONE_TOKENPARTITION),
             )
+            lib.vpx_codec_control_(
+                self.codec, lib.VP8E_SET_CQ_LEVEL, ffi.cast("unsigned int", self.crf)
+            )
 
             # create image on a dummy buffer, we will fill the pointers during encoding
             self.image = ffi.new("vpx_image_t *")
@@ -307,6 +305,14 @@ class Vp8Encoder(Encoder):
             )
         elif self.__update_config_needed:
             self.__update_config()
+            # grab self.crf since another thread could update its value between setting min/max quant and CQ_LEVEL
+            # yes this has actually happened
+            crf = self.crf
+            self.cfg.rc_min_quantizer = self.cfg.rc_max_quantizer = crf
+            # yes this has to be done as well
+            lib.vpx_codec_control_(
+                self.codec, lib.VP8E_SET_CQ_LEVEL, ffi.cast("unsigned int", crf)
+            )
             _vpx_assert(lib.vpx_codec_enc_config_set(self.codec, self.cfg))
 
         # setup image
@@ -393,6 +399,25 @@ class Vp8Encoder(Encoder):
     def __update_config(self) -> None:
         self.cfg.rc_target_bitrate = self.__target_bitrate // 1000
         self.__update_config_needed = False
+
+    def min_crf(self) -> float:
+        return 0
+
+    def max_crf(self) -> float:
+        return 63
+
+    def get_crf(self) -> float:
+        return self.crf_float
+
+    def set_crf(self, crf: float):
+        if crf < self.min_crf() or crf > self.max_crf():
+            raise ValueError(f'crf={crf} out of range')
+
+        self.crf_float = crf
+
+        if int(crf) != self.crf:
+            self.crf = int(crf)
+            self.__update_config_needed = True
 
 
 def vp8_depayload(payload: bytes) -> bytes:

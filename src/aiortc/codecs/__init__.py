@@ -12,7 +12,7 @@ from ..rtcrtpparameters import (
 from .base import Decoder, Encoder
 from .g711 import PcmaDecoder, PcmaEncoder, PcmuDecoder, PcmuEncoder
 from .h264 import H264Decoder, H264Encoder, h264_depayload
-from .opus import OpusDecoder, OpusEncoder
+from .opus import OpusDecoder, OpusEncoder, MultiOpusEncoder
 from .vpx import Vp8Decoder, Vp8Encoder, vp8_depayload
 
 PCMU_CODEC = RTCRtpCodecParameters(
@@ -24,6 +24,9 @@ PCMA_CODEC = RTCRtpCodecParameters(
 
 CODECS: Dict[str, List[RTCRtpCodecParameters]] = {
     "audio": [
+        RTCRtpCodecParameters(
+            mimeType="audio/multiopus", clockRate=48000, channels=6, payloadType=96
+        ),
         RTCRtpCodecParameters(
             mimeType="audio/opus", clockRate=48000, channels=2, payloadType=96
         ),
@@ -157,6 +160,8 @@ def get_encoder(codec: RTCRtpCodecParameters) -> Encoder:
 
     if mimeType == "audio/opus":
         return OpusEncoder()
+    elif mimeType == "audio/multiopus":
+        return MultiOpusEncoder()
     elif mimeType == "audio/pcma":
         return PcmaEncoder()
     elif mimeType == "audio/pcmu":
